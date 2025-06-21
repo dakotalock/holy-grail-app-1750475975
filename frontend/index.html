@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Bawdy Bard</title>
+    <!-- Tailwind CSS CDN for rapid styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- P5.js CDN for generative background visuals -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        /*
+         * Custom CSS styles beyond Tailwind for specific layout, animations,
+         * and generative background integration.
+         */
+        body {
+            font-family: 'Georgia', serif; /* A classic, slightly "bard-like" font choice */
+            overflow: hidden; /* Prevent body scroll, let the chat area handle scrolling */
+            /* Ensure full viewport height for the app container */
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Generative Background Canvas Styling */
+        #generative-background-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1; /* Place behind all other content */
+            opacity: 0.6; /* Make the background subtle */
+            filter: blur(2px); /* Soften the visual effects */
+            pointer-events: none; /* Ensure canvas doesn't block interactions */
+        }
+
+        /* Main Application Container */
+        #app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%; /* Take full height of the body */
+            background-color: rgba(0, 0, 0, 0.7); /* Semi-transparent overlay for text readability */
+            color: #e0e0e0; /* Light text on dark background for contrast */
+        }
+
+        /* Message Display Area */
+        #message-display {
+            flex-grow: 1; /* Allows it to take up all available vertical space */
+            overflow-y: auto; /* Enable vertical scrolling for messages */
+            scroll-behavior: smooth; /* Smooth scrolling experience */
+            padding: 1rem;
+            /* Hide scrollbar for a cleaner look (cross-browser) */
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+        #message-display::-webkit-scrollbar { /* Chrome, Safari, Opera */
+            display: none;
+        }
+
+        /* Individual Message Bubbles */
+        .message-bubble {
+            max-width: 80%; /* Limit message width for better readability */
+            margin-bottom: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: 1.25rem; /* More rounded bubble corners */
+            line-height: 1.5;
+            word-wrap: break-word; /* Ensure long words wrap */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); /* Subtle shadow for depth */
+        }
+
+        /* User Message Specific Styles */
+        .user-message {
+            background-color: #3f51b5; /* A deep blue for user messages */
+            margin-left: auto; /* Aligns user messages to the right */
+            border-bottom-right-radius: 0.25rem; /* Slightly less rounded corner on the sender side */
+        }
+
+        /* Bot Message Specific Styles */
+        .bot-message {
+            background-color: #9c27b0; /* A playful purple for bot messages */
+            margin-right: auto; /* Aligns bot messages to the left */
+            border-bottom-left-radius: 0.25rem; /* Slightly less rounded corner on the sender side */
+            animation: fadeIn 0.3s ease-out; /* Simple fade-in animation */
+        }
+
+        /* Bot message subtle wobble effect for "bawdy" responses */
+        .bot-message.wobble {
+            animation: wobble 0.6s ease-in-out;
+        }
+
+        /* Keyframe Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes wobble {
+            0% { transform: translateX(0px); }
+            25% { transform: translateX(-2px) rotate(-0.5deg); }
+            50% { transform: translateX(2px) rotate(0.5deg); }
+            75% { transform: translateX(-1px) rotate(-0.2deg); }
+            100% { transform: translateX(0px); }
+        }
+
+        /* User Input Area Styling */
+        #user-input-area {
+            background-color: rgba(20, 20, 20, 0.9); /* Darker, slightly transparent background */
+            padding: 1rem;
+            display: flex;
+            align-items: flex-end; /* Align items to the bottom, especially textarea */
+            gap: 0.75rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1); /* Subtle top border */
+        }
+
+        /* User Input Textarea Styling */
+        #user-input-textarea {
+            flex-grow: 1; /* Allows textarea to fill available space */
+            padding: 0.75rem 1rem;
+            border-radius: 1.5rem; /* Rounded corners */
+            background-color: #333; /* Dark background for input */
+            border: none;
+            color: #e0e0e0; /* Light text color */
+            resize: none; /* Disable manual resizing by user */
+            min-height: 2.5rem; /* Minimum height for single line */
+            max-height: 10rem; /* Max height before content scrolls internally */
+            outline: none; /* Remove default focus outline */
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.3); /* Subtle inner shadow */
+            line-height: 1.5; /* Consistent line height */
+        }
+        #user-input-textarea:focus {
+            box-shadow: 0 0 0 2px #9c27b0; /* Custom focus ring for accessibility and aesthetics */
+        }
+
+        /* Action Buttons (Send, New Conversation) */
+        .action-button {
+            background-color: #9c27b0; /* Purple background */
+            color: white;
+            border: none;
+            border-radius: 50%; /* Circular buttons */
+            width: 2.5rem;
+            height: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
+            flex-shrink: 0; /* Prevent buttons from shrinking */
+        }
+        .action-button:hover {
+            background-color: #7b1fa2; /* Darker purple on hover */
+            transform: translateY(-1px); /* Slight lift effect */
+        }
+        .action-button:active {
+            transform: translateY(0); /* Return to original position on click */
+        }
+        .action-button:disabled {
+            background-color: #555; /* Grey out when disabled */
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        /* Loading Indicator (Typing Dots) */
+        #loading-indicator-bubble {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            font-style: italic;
+            color: #aaa;
+        }
+        .dot {
+            width: 8px;
+            height: 8px;
+            background-color: #9c27b0;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both; /* Typing animation */
+        }
+        .dot:nth-child(1) { animation-delay: -0.32s; } /* Stagger animation for dots */
+        .dot:nth-child(2) { animation-delay: -0.16s; }
+        .dot:nth-child(3) { animation-delay: 0s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); } /* Dots disappear */
+            40% { transform: scale(1); } /* Dots appear */
+        }
+
+        /* Responsive Adjustments for Smaller Screens */
+        @media (max-width: 640px) {
+            #app-container {
+                border-radius: 0; /* Full screen on mobile devices */
+                max-width: 100%; /* Ensure it takes full width */
+            }
+            .message-bubble {
+                max-width: 90%; /* Slightly wider messages on small screens */
+            }
+            #user-input-area {
+                padding: 0.75rem;
+                gap: 0.5rem;
+            }
+            #user-input-textarea {
+                padding: 0.6rem 0.8rem;
+                font-size: 0.9rem; /* Slightly smaller font for input */
+            }
+            .action-button {
+                width: 2.2rem;
+                height: 2.2rem;
+            }
+            #chat-header {
+                font-size: 1.5rem; /* Smaller header on mobile */
+                padding: 0.8rem;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+
+    <!-- Generative Background Canvas -->
+    <canvas id="generative-background-canvas"></canvas>
+
+    <!-- Main Application Container -->
+    <div id="app-container" class="relative z-10 mx-auto max-w-3xl shadow-2xl rounded-lg overflow-hidden">
+
+        <!-- Chat Header -->
+        <header id="chat-header" class="bg-purple-800 text-white p-4 text-center text-2xl font-bold border-b border-purple-700 shadow-md flex items-center justify-center gap-2">
+            <span id="bard-mood-icon" role="img" aria-label="Bard mood icon">🎭</span>
+            The Bawdy Bard
+        </header>
+
+        <!-- Message Display Area -->
+        <main id="message-display" class="flex flex-col p-4 bg-gray-800" aria-live="polite">
+            <!-- Messages will be dynamically appended here by JavaScript -->
+        </main>
+
+        <!-- User Input Area -->
+        <footer id="user-input-area" class="flex-shrink-0">
+            <button id="new-conversation-button" class="action-button" title="Start New Conversation" aria-label="Start New Conversation">
+                <!-- SVG Icon for New Conversation -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" />
+                </svg>
+            </button>
+            <textarea
+                id="user-input-textarea"
+                class="rounded-full py-2 px-4 focus:outline-none"
+                placeholder="Ask the Bard for a bawdy tale..."
+                rows="1"
+                aria-label="Your message input"
+            ></textarea>
+            <button id="send-button" class="action-button" title="Send Message" aria-label="Send Message">
+                <!-- SVG Icon for Send Message (Stylized Quill Pen) -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l4.453-1.483 2.016 4.032a1 1 0 001.815.152l7-14a1 1 0 00-.542-1.605z" />
+                </svg>
+            </button>
+        </footer>
+    </div>
+
+    <script>
+        /**
+         * The Bawdy Bard Frontend Application - Vanilla JavaScript Implementation
+         *
+         * This script powers the interactive chat interface for "The Bawdy Bard" AI chatbot.
+         * It handles user input, communicates with the backend API, displays messages,
+         * and integrates a dynamic generative background visual using P5.js.
+         *
+         * Key Features:
+         * - Chat message display (user and bot messages with distinct styles).
+         * - User input text area with auto-resizing and send functionality.
+         * - "Start New Conversation" button to clear context.
+         * - Loading indicator with a simulated typing animation for bot responses.
+         * - Persistence of conversation ID across sessions using localStorage.
+         * - Dynamic generative visual background using P5.js that subtly reacts to the bot's "mood"
+         *   (e.g., more vibrant/chaotic when the bot delivers a "bawdy" joke).
+         * - Basic error handling and user feedback.
+         * - Responsive design principles for various screen sizes.
+         * - Accessibility considerations (ARIA attributes, keyboard navigation).
+         */
+
+        // --- Configuration ---
+        // IMPORTANT: Ensure this URL matches your FastAPI backend's address and port.
+        const API_BASE_URL = 'http://localhost:8000/api/v1';
+        const CONVERSATION_ID_STORAGE_KEY = 'bawdyBardConversationId';
+
+        // --- Global State Management ---
+        // This object holds the current state of the application.
+        const state = {
+            conversationId: localStorage.getItem(CONVERSATION_ID_STORAGE_KEY), // Load existing conversation ID
+            messages: [], // Array of message objects: { sender: 'user' | 'bot', content: '...', timestamp: '...' }
+            isLoading: false, // Indicates if waiting for a bot response
+            isBotJoking: false, // Flag to influence generative visuals (heuristic-based)
+            messageQueue: [], // Used for character-by-character typing animation
+            typingInterval: null, // Stores the interval ID for typing animation
+            currentBotMessageElement: null, // Reference to the currently typing bot message div
+        };
+
+        // --- DOM Element References ---
+        // Cache frequently accessed DOM elements for performance.
+        const appContainer = document.getElementById('app-container');
+        const chatHeader = document.getElementById('chat-header');
+        const bardMoodIcon = document.getElementById('bard-mood-icon');
+        const messageDisplay = document.getElementById('message-display');
+        const userInputTextarea = document.getElementById('user-input-textarea');
+        const sendButton = document.getElementById('send-button');
+        const newConversationButton = document.getElementById('new-conversation-button');
+        const generativeCanvas = document.getElementById('generative-background-canvas');
+
+        // --- Helper Functions ---
+
+        /**
+         * Toggles the loading state of the application.
+         * Updates UI elements like buttons and input field to reflect the loading status.
+         * @param {boolean} isLoading - True to set loading state, false to clear it.
+         */
+        function toggleLoading(isLoading) {
+            state.isLoading = isLoading;
+            // Disable/enable interactive elements during loading
+            sendButton.disabled = isLoading;
+            userInputTextarea.disabled = isLoading;
+            newConversationButton.disabled = isLoading;
+
+            if (isLoading) {
+                // Create and display a temporary loading message bubble (typing indicator)
+                state.currentBotMessageElement = displayMessage({
+                    sender: 'bot',
+                    content: '<span class="dot"></span><span class="dot"></span><span class="dot"></span>',
+                    timestamp: new Date().toISOString()
+                }, true); // The second argument 'true' marks it as a placeholder
+                state.currentBotMessageElement.setAttribute('aria-label', 'Bot is typing');
+                messageDisplay.scrollTop = messageDisplay.scrollHeight; // Scroll to view the indicator
+            } else {
+                // If a loading placeholder exists, remove it when loading finishes
+                if (state.currentBotMessageElement && state.currentBotMessageElement.querySelector('.dot')) {
+                    state.currentBotMessageElement.remove();
+                }
+                state.currentBotMessageElement = null; // Clear the reference
+            }
+        }
+
+        /**
+         * Creates and appends a message bubble to the chat display.
+         * @param {Object} message - The message object { sender: 'user' | 'bot', content: 'string', timestamp: 'string' }.
+         * @param {boolean} isPlaceholder - If true, treats the message as a temporary loading indicator.
+         * @returns {HTMLElement} The newly created message bubble DOM element.
+         */
+        function displayMessage(message, isPlaceholder = false) {
+            const messageBubble = document.createElement('div');
+            messageBubble.classList.add('message-bubble', 'shadow-md');
+            messageBubble.setAttribute('role', 'status'); // For screen readers to announce new messages
+
+            if (message.sender === 'user') {
+                messageBubble.classList.add('user-message');
+                messageBubble.setAttribute('aria-label', `You said: ${message.content}`);
+            } else {
+                messageBubble.classList.add('bot-message');
+                // Apply the 'wobble' animation only for "bawdy" bot responses that are not placeholders
+                if (!isPlaceholder && state.isBotJoking) {
+                    messageBubble.classList.add('wobble');
+                    // Remove the wobble class after animation to allow it to be re-triggered
+                    messageBubble.addEventListener('animationend', () => {
+                        messageBubble.classList.remove('wobble');
+                    }, { once: true });
+                }
+                messageBubble.setAttribute('aria-label', `The Bard said: ${message.content}`);
+            }
+
+            // Set message content. InnerHTML is used here to allow the typing dots
+            // to be rendered as HTML directly. For user messages, content is plain text.
+            messageBubble.innerHTML = message.content;
+            messageDisplay.appendChild(messageBubble);
+
+            // Ensure the chat scrolls to the latest message
+            messageDisplay.scrollTop = messageDisplay.scrollHeight;
+            return messageBubble;
+        }
+
+        /**
+         * Simulates a bot typing animation by revealing the message character by character.
+         * This function takes over the `currentBotMessageElement` (the loading placeholder).
+         * @param {string} content - The full message content to be typed out.
+         */
+        function simulateTyping(content) {
+            state.messageQueue = content.split(''); // Convert message to an array of characters
+            let typedContent = '';
+            const botMessageElement = state.currentBotMessageElement; // Get the placeholder element
+
+            if (!botMessageElement) {
+                // Fallback: if somehow the placeholder isn't there, just display the full message
+                addMessage('bot', content);
+                return;
+            }
+
+            // Clear the loading dots from the placeholder element
+            botMessageElement.innerHTML = '';
+
+            // Set up an interval to add characters one by one
+            state.typingInterval = setInterval(() => {
+                if (state.messageQueue.length > 0) {
+                    typedContent += state.messageQueue.shift(); // Take next character from queue
+                    botMessageElement.innerHTML = typedContent; // Update the element's content
+                    messageDisplay.scrollTop = messageDisplay.scrollHeight; // Keep scrolling to bottom
+                } else {
+                    clearInterval(state.typingInterval); // Stop the animation when done
+                    state.typingInterval = null;
+                    // Add the complete message to the actual state.messages array
+                    state.messages.push({
+                        sender: 'bot',
+                        content: content,
+                        timestamp: new Date().toISOString()
+                    });
+                    // Re-apply wobble class if it was a joke, now that content is final
+                    if (state.isBotJoking) {
+                        botMessageElement.classList.add('wobble');
+                    }
+                }
+            }, 30); // Typing speed: 30 milliseconds per character
+        }
+
+        /**
+         * Adds a message to the application's state and immediately displays it.
+         * This is primarily used for user messages or direct bot error messages.
+         * @param {string} sender - The sender of the message ('user' or 'bot').
+         * @param {string} content - The text content of the message.
+         * @param {string} timestamp - ISO string timestamp of the message.
+         */
+        function addMessage(sender, content, timestamp) {
+            const message = { sender, content, timestamp };
+            state.messages.push(message); // Add to the state array
+            displayMessage(message); // Render on screen
+        }
+
+        /**
+         * Automatically adjusts the height of the user input textarea to fit its content.
+         */
+        function autoResizeTextarea() {
+            userInputTextarea.style.height = 'auto'; // Reset height to calculate scrollHeight
+            userInputTextarea.style.height = (userInputTextarea.scrollHeight) + 'px'; // Set to content height
+        }
+
+        // --- API Client Functions ---
+
+        /**
+         * Sends a user message to the backend API and retrieves the bot's response.
+         * @param {string | null} conversationId - The current conversation ID, or null for a new chat.
+         * @param {string} message - The user's input message.
+         * @returns {Promise<Object>} A promise that resolves with the bot's response data.
+         * @throws {Error} If the API request fails or returns an error.
+         */
+        async function sendMessageToBard(conversationId, message) {
+            const payload = {
+                conversation_id: conversationId,
+                message: message
+            };
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                if (!response.ok) {
+                    // Attempt to parse error details from the response body
+                    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+                    throw new Error(errorData.detail || `API error: ${response.status}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                console.error('Error sending message:', error);
+                throw error; // Re-throw the error for the calling function to handle
+            }
+        }
+
+        /**
+         * Retrieves the full message history for a given conversation ID from the backend.
+         * @param {string} conversationId - The ID of the conversation to retrieve.
+         * @returns {Promise<Object>} A promise that resolves with the conversation history data.
+         * @throws {Error} If the API request fails.
+         */
+        async function getConversationHistory(conversationId) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/conversations/${conversationId}`);
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+                    throw new Error(errorData.detail || `API error: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error('Error fetching conversation history:', error);
+                throw error;
+            }
+        }
+
+        /**
+         * Deletes a specific conversation and its messages from the backend.
+         * @param {string} conversationId - The ID of the conversation to delete.
+         * @returns {Promise<void>} A promise that resolves when the deletion is complete.
+         */
+        async function deleteConversation(conversationId) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/conversations/${conversationId}`, {
+                    method: 'DELETE',
+                });
+                // Expect a 204 No Content status for successful deletion
+                if (!response.ok && response.status !== 204) {
+                    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+                    throw new Error(errorData.detail || `API error: ${response.status}`);
+                }
+            } catch (error) {
+                console.error('Error deleting conversation:', error);
+                // Do not re-throw here, as deletion failure shouldn't block starting a new chat
+                alert(`Failed to delete old conversation: ${error.message}. It might still be on the server.`);
+            }
+        }
+
+        // --- Event Handlers ---
+
+        /**
+         * Handles the user initiating a message send.
+         * This function is asynchronous as it interacts with the backend API.
+         */
+        async function handleSendMessage() {
+            const userMessage = userInputTextarea.value.trim();
+            if (!userMessage) {
+                return; // Do not send empty messages
+            }
+
+            // Clear the input field and reset its height
+            userInputTextarea.value = '';
+            autoResizeTextarea();
+
+            // Immediately display the user's message in the chat
+            addMessage('user', userMessage, new Date().toISOString());
+
+            toggleLoading(true); // Show the loading indicator and disable input
+
+            try {
+                const responseData = await sendMessageToBard(state.conversationId, userMessage);
+                state.conversationId = responseData.conversation_id; // Update conversation ID
+                localStorage.setItem(CONVERSATION_ID_STORAGE_KEY, state.conversationId); // Persist ID
+
+                // Heuristic to determine if the bot's response is "bawdy" or a "joke"
+                // This can be refined or replaced by a direct flag from the backend.
+                const lowerCaseResponse = responseData.response.toLowerCase();
+                state.isBotJoking = /joke|dirty|naughty|unfiltered|humor|bard|rude|filthy|raunchy|lewd|vulgar/.test(lowerCaseResponse);
+                updateGenerativeVisuals(); // Trigger visual change based on bot's "mood"
+
+                // Clear any previous typing animation before starting a new one
+                if (state.typingInterval) {
+                    clearInterval(state.typingInterval);
+                }
+                simulateTyping(responseData.response); // Start bot typing animation
+
+            } catch (error) {
+                console.error('Failed to get bot response:', error);
+                const errorMessage = `Alas, the Bard is speechless! (${error.message}). Please try again.`;
+                addMessage('bot', errorMessage, new Date().toISOString());
+                state.isBotJoking = false; // Reset visual flag on error
+                updateGenerativeVisuals(); // Update visuals to neutral
+            } finally {
+                toggleLoading(false); // Hide loading indicator and re-enable input
+            }
+        }
+
+        /**
+         * Handles the user initiating a new conversation.
+         * Prompts for confirmation and clears the chat history locally and on the backend.
+         */
+        async function handleNewConversation() {
+            if (state.conversationId && !confirm('Are you sure you want to start a new conversation? This will clear your current chat history.')) {
+                return; // User cancelled
+            }
+
+            if (state.conversationId) {
+                await deleteConversation(state.conversationId); // Attempt to delete history on backend
+            }
+
+            // Reset local state
+            state.conversationId = null;
+            state.messages = [];
+            localStorage.removeItem(CONVERSATION_ID_STORAGE_KEY); // Remove ID from local storage
+            messageDisplay.innerHTML = ''; // Clear chat display
+            userInputTextarea.value = ''; // Clear input field
+            autoResizeTextarea(); // Reset textarea height
+            state.isBotJoking = false; // Reset visual mood
+            updateGenerativeVisuals(); // Update visuals to neutral
+            clearInterval(state.typingInterval); // Stop any ongoing typing animation
+            state.messageQueue = []; // Clear typing queue
+            state.currentBotMessageElement = null; // Clear reference
+            alert('A fresh parchment for new tales! What say you, adventurer?');
+            userInputTextarea.focus(); // Focus input for immediate typing
+        }
+
+        // --- Application Initialization ---
+
+        /**
+         * Initializes the chat application when the DOM is fully loaded.
+         * Sets up event listeners and attempts to load an existing conversation.
+         */
+        async function initializeChat() {
+            // Set up event listeners for input and buttons
+            userInputTextarea.addEventListener('input', autoResizeTextarea);
+            userInputTextarea.addEventListener('keydown', (e) => {
+                // Send message on Enter key press (unless Shift is also pressed for new line)
+                if (e.key === 'Enter' && !e.shiftKey && !state.isLoading) {
+                    e.preventDefault(); // Prevent default Enter behavior (new line)
+                    handleSendMessage();
+                }
+            });
+            sendButton.addEventListener('click', handleSendMessage);
+            newConversationButton.addEventListener('click', handleNewConversation);
+
+            // Attempt to load existing conversation history if an ID is found in local storage
+            if (state.conversationId) {
+                try {
+                    const history = await getConversationHistory(state.conversationId);
+                    if (history && history.messages && history.messages.length > 0) {
+                        state.messages = history.messages; // Load messages into state
+                        state.messages.forEach(msg => displayMessage(msg)); // Display them
+                        messageDisplay.scrollTop = messageDisplay.scrollHeight; // Scroll to bottom
+                        console.log(`Loaded conversation ID: ${state.conversationId}`);
+                    } else {
+                        // If no messages found for the ID, consider it invalid and start fresh
+                        console.warn('No messages found for existing conversation ID. Starting a new one.');
+                        state.conversationId = null;
+                        localStorage.removeItem(CONVERSATION_ID_STORAGE_KEY);
+                    }
+                } catch (error) {
+                    // Handle errors during history loading (e.g., ID no longer valid on backend)
+                    console.error('Failed to load conversation history:', error);
+                    alert('Could not load past conversation. Starting a fresh one.');
+                    state.conversationId = null; // Reset ID
+                    localStorage.removeItem(CONVERSATION_ID_STORAGE_KEY);
+                }
+            } else {
+                console.log('No existing conversation ID found. A new one will be created upon first message.');
+            }
+
+            // Perform initial auto-resize for the textarea
+            autoResizeTextarea();
+            userInputTextarea.focus(); // Focus on the input field when app loads
+        }
+
+        // --- Generative Visuals (P5.js Sketch Definition) ---
+        let sketchInstance; // Global variable to hold the P5.js sketch instance
+
+        /**
+         * Controls the generative background visuals based on the chat state.
+         * This function calls methods on the P5.js sketch instance to update parameters.
+         */
+        function updateGenerativeVisuals() {
+            if (sketchInstance) {
+                // Notify the P5.js sketch about the bot's mood
+                sketchInstance.setBardMood(state.isBotJoking);
+
+                // Update the Bard mood icon in the header
+                if (state.isBotJoking) {
+                    bardMoodIcon.textContent = '😈'; // Devil emoji for "bawdy" mood
+                    bardMoodIcon.style.animation = 'wobble 0.6s infinite'; // Animate the icon
+                } else {
+                    bardMoodIcon.textContent = '🎭'; // Neutral mask for regular mood
+                    bardMoodIcon.style.animation = 'none'; // Stop animation
+                }
+            }
+        }
+
+        /**
+         * The P5.js sketch function.
+         * This defines the setup and drawing logic for the generative background.
+         * @param {p5} p - The p5.js instance.
+         */
+        const p5Sketch = (p) => {
+            let particles = [];
+            let numParticles = 100; // Default number of particles
+            // Initial color and speed parameters
+            let currentHue = 250; // Blue-ish hue
+            let saturation = 70;
+            let brightness = 80;
+            let particleSpeed = 1;
+
+            // Target values for smooth interpolation
+            let targetHue = currentHue;
+            let targetSaturation = saturation;
+            let targetBrightness = brightness;
+            let targetParticleSpeed = particleSpeed;
+
+            p.setup = () => {
+                // Create the canvas and attach it to the specific div
+                p.createCanvas(p.windowWidth, p.windowHeight).parent('generative-background-canvas');
+                p.colorMode(p.HSB, 360, 100, 100, 1); // Use HSB color mode for easier manipulation
+                p.noStroke(); // No outlines for particles
+
+                // Initialize particles
+                for (let i = 0; i < numParticles; i++) {
+                    particles.push(new Particle(p));
+                }
+            };
+
+            p.draw = () => {
+                // Subtle background fade effect to create trails and clear old particles
+                p.background(0, 0, 0, 0.05);
+
+                // Smoothly interpolate current values towards target values
+                currentHue = p.lerp(currentHue, targetHue, 0.05);
+                saturation = p.lerp(saturation, targetSaturation, 0.05);
+                brightness = p.lerp(brightness, targetBrightness, 0.05);
+                particleSpeed = p.lerp(particleSpeed, targetParticleSpeed, 0.05);
+
+                // Update and display each particle
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    let particle = particles[i];
+                    particle.update(particleSpeed);
+                    particle.display(currentHue, saturation, brightness);
+                    if (particle.isDead()) {
+                        particles.splice(i, 1); // Remove dead particle
+                        particles.push(new Particle(p)); // Add a new particle to maintain count
+                    }
+                }
+            };
+
+            p.windowResized = () => {
+                // Adjust canvas size when browser window is resized
+                p.resizeCanvas(p.windowWidth, p.windowHeight);
+            };
+
+            /**
+             * Public method to set the "Bard's mood" which influences visual parameters.
+             * @param {boolean} isJoking - True if the bot is in a "bawdy" mood.
+             */
+            p.setBardMood = (isJoking) => {
+                if (isJoking) {
+                    // "Bawdy" mood: shift to warm, more saturated, brighter, faster colors/particles
+                    targetHue = p.random(0, 60); // Reds, oranges, yellows
+                    targetSaturation = 90;
+                    targetBrightness = 95;
+                    targetParticleSpeed = 2.5; // Faster, more energetic movement
+                    numParticles = 150; // Increase particle density
+                } else {
+                    // Neutral mood: cool, calmer colors and slower particles
+                    targetHue = p.random(200, 280); // Blues, purples
+                    targetSaturation = 70;
+                    targetBrightness = 80;
+                    targetParticleSpeed = 1; // Slower, calmer movement
+                    numParticles = 100; // Restore default particle count
+                }
+                // Dynamically adjust particle count
+                while(particles.length < numParticles) {
+                    particles.push(new Particle(p));
+                }
+                while(particles.length > numParticles) {
+                    particles.pop();
+                }
+            };
+
+            // --- Particle Class (nested within the sketch for scope) ---
+            class Particle {
+                constructor(p) {
+                    this.p = p; // Reference to the p5 instance
+                    this.x = p.random(p.width);
+                    this.y = p.random(p.height);
+                    this.vx = p.random(-0.5, 0.5); // Initial horizontal velocity
+                    this.vy = p.random(-0.5, 0.5); // Initial vertical velocity
+                    this.alpha = p.random(50, 150); // Initial transparency
+                    this.life = 255; // Life counter, decreases over time
+                    this.radius = p.random(2, 6); // Size of the particle
+                }
+
+                update(speedMultiplier) {
+                    this.x += this.vx * speedMultiplier;
+                    this.y += this.vy * speedMultiplier;
+                    this.life -= p.random(0.5, 2); // Reduce life, causing fade out
+                    this.alpha = p.map(this.life, 0, 255, 0, 150); // Map life to alpha value
+
+                    // Wrap particles around the screen edges
+                    if (this.x < 0) this.x = p.width;
+                    if (this.x > p.width) this.x = 0;
+                    if (this.y < 0) this.y = p.height;
+                    if (this.y > p.height) this.y = 0;
+                }
+
+                display(hue, sat, bright) {
+                    this.p.fill(hue, sat, bright, this.alpha / 255); // Set particle color and transparency
+                    this.p.ellipse(this.x, this.y, this.radius * 2); // Draw as a circle
+                }
+
+                isDead() {
+                    return this.life < 0; // Particle is dead when life runs out
+                }
+            }
+        };
+
+        // --- Application Entry Point ---
+        // Ensures the script runs only after the entire HTML document is loaded.
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeChat(); // Start the chat application logic
+            sketchInstance = new p5(p5Sketch); // Initialize the P5.js generative background
+            updateGenerativeVisuals(); // Set initial mood for visuals (default neutral)
+        });
+    </script>
+
+    <div style="position:fixed;bottom:10px;right:10px;background:rgba(0,0,0,0.7);color:white;padding:5px 10px;border-radius:5px;font-family:sans-serif;font-size:12px">
+        Created by Dakota Rain Lock, powered by Holy Grail. A Dakota Rain Lock Invention.
+    </div>
+    
+</body>
+</html>
